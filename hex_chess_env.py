@@ -6,7 +6,6 @@ import matplotlib.patches as patches
 from intellector.moves import POSSIBLE_MOVES
 import intellector.pieces as pieces
 
-
 class HexChessEnv(gymnasium.Env):
 
     metadata: dict = {
@@ -205,7 +204,9 @@ class HexChessEnv(gymnasium.Env):
         size = self.get_size(name)
         possibles = np.zeros((size, 2), dtype=np.int32)
         actions_mask = np.zeros(size, dtype=np.int32)
-        return possibles, actions_mask
+        source_pos = np.zeros((size, 2), dtype=np.int32)
+
+        return source_pos, possibles, actions_mask
 
     def is_in_range(self, pos) -> bool:
         row, col = pos
@@ -221,7 +222,7 @@ class HexChessEnv(gymnasium.Env):
             return self.get_empty_actions("progressor")
 
         row, col = pos
-        possibles, actions_mask = self.get_empty_actions("progressor")
+        source_pos, possibles, actions_mask = self.get_empty_actions("progressor")
 
         if turn == pieces.WHITE:
             if col % 2 == 0:
@@ -246,16 +247,17 @@ class HexChessEnv(gymnasium.Env):
             next_pos = (r, c)
             if not self.is_in_range(next_pos) or not self.is_empty(next_pos, turn):
                 continue
+            source_pos[i] = pos
             possibles[i] = next_pos
             actions_mask[i] = 1
 
-        return possibles, actions_mask
+        return source_pos, possibles, actions_mask
 
     def get_actions_for_agressor(self, pos, turn: int):
-        possibles, actions_mask = self.get_empty_actions("agressor")
+        source_pos, possibles, actions_mask = self.get_empty_actions("agressor")
 
         if pos is None:
-            return possibles, actions_mask
+            return source_pos, possibles, actions_mask
 
         row, col = pos
 
@@ -269,6 +271,7 @@ class HexChessEnv(gymnasium.Env):
             ):
                 break
             possibles[index] = next_pos
+            source_pos[index] = pos
             actions_mask[index] = 1
             index += 1
 
@@ -280,6 +283,7 @@ class HexChessEnv(gymnasium.Env):
             ):
                 break
             possibles[index] = next_pos
+            source_pos[index] = pos
             actions_mask[index] = 1
             index += 1
 
@@ -304,6 +308,7 @@ class HexChessEnv(gymnasium.Env):
                 ):
                     break
             possibles[index] = next_pos
+            source_pos[index] = pos
             actions_mask[index] = 1
             index += 1
 
@@ -327,6 +332,7 @@ class HexChessEnv(gymnasium.Env):
                 ):
                     break
             possibles[index] = next_pos
+            source_pos[index] = pos
             actions_mask[index] = 1
             index += 1
 
@@ -350,6 +356,7 @@ class HexChessEnv(gymnasium.Env):
                 ):
                     break
             possibles[index] = next_pos
+            source_pos[index] = pos
             actions_mask[index] = 1
             index += 1
 
@@ -373,16 +380,17 @@ class HexChessEnv(gymnasium.Env):
                 ):
                     break
             possibles[index] = next_pos
+            source_pos[index] = pos
             actions_mask[index] = 1
             index += 1
 
-        return possibles, actions_mask
+        return source_pos, possibles, actions_mask
 
     def get_actions_for_intellector(self, pos, turn: int):
-        possibles, actions_mask = self.get_empty_actions("intellector")
+        source_pos, possibles, actions_mask = self.get_empty_actions("intellector")
 
         if pos is None:
-            return possibles, actions_mask
+            return source_pos, possibles, actions_mask
 
         row, col = pos
         intellector_moves = self.adjacent_hexes(row, col)
@@ -391,18 +399,20 @@ class HexChessEnv(gymnasium.Env):
             if self.is_valid_move(next_pos, turn):
                 if self.is_defensor(next_pos, turn):
                     possibles[i] = next_pos
+                    source_pos[i] = pos
                     actions_mask[i] = 1
                 elif self.is_empty(next_pos, turn):
                     possibles[i] = next_pos
+                    source_pos[i] = pos
                     actions_mask[i] = 1
 
-        return possibles, actions_mask
+        return source_pos, possibles, actions_mask
 
     def get_actions_for_defensor(self, pos, turn: int):
-        possibles, actions_mask = self.get_empty_actions("defensor")
+        source_pos, possibles, actions_mask = self.get_empty_actions("defensor")
 
         if pos is None:
-            return possibles, actions_mask
+            return source_pos, possibles, actions_mask
 
         row, col = pos
         defensor_moves = self.adjacent_hexes(row, col)
@@ -411,17 +421,19 @@ class HexChessEnv(gymnasium.Env):
             if self.is_valid_move(next_pos, turn):
                 if self.is_intellector(next_pos, turn):
                     possibles[i] = next_pos
+                    source_pos[i] = pos
                     actions_mask[i] = 1
                 elif self.is_empty(next_pos, turn):
                     possibles[i] = next_pos
+                    source_pos[i] = pos
                     actions_mask[i] = 1
 
-        return possibles, actions_mask
+        return source_pos, possibles, actions_mask
 
     def get_actions_for_liberator(self, pos, turn: int):
-        possibles, actions_mask = self.get_empty_actions("liberator")
+        source_pos, possibles, actions_mask = self.get_empty_actions("liberator")
         if pos is None:
-            return possibles, actions_mask
+            return source_pos, possibles, actions_mask
 
         row, col = pos
         liberator_moves = self.adjacent_hexes(row, col)
@@ -435,6 +447,7 @@ class HexChessEnv(gymnasium.Env):
                 continue
 
             possibles[i] = next_pos
+            source_pos[i] = pos
             actions_mask[i] = 1
 
         moves = [
@@ -454,14 +467,15 @@ class HexChessEnv(gymnasium.Env):
                 continue
 
             possibles[i + 6] = next_pos
+            source_pos[i + 6] = pos
             actions_mask[i + 6] = 1
 
-        return possibles, actions_mask
+        return source_pos, possibles, actions_mask
 
     def get_actions_for_dominator(self, pos, turn: int):
-        possibles, actions_mask = self.get_empty_actions("dominator")
+        source_pos, possibles, actions_mask = self.get_empty_actions("dominator")
         if pos is None:
-            return possibles, actions_mask
+            return source_pos, possibles, actions_mask
 
         row, col = pos
         index = 0  # Индекс для отслеживания позиции в массивах possibles и actions_mask
@@ -475,6 +489,7 @@ class HexChessEnv(gymnasium.Env):
                 break
             possibles[index] = next_pos
             actions_mask[index] = 1
+            source_pos[index] = pos
             index += 1
 
         # Vertical moves upward
@@ -486,10 +501,12 @@ class HexChessEnv(gymnasium.Env):
                 break
             if self.is_enemy(next_pos, turn):
                 possibles[index] = next_pos
+                source_pos[index] = pos
                 actions_mask[index] = 1
                 index += 1
                 break
             possibles[index] = next_pos
+            source_pos[index] = pos
             actions_mask[index] = 1
             index += 1
 
@@ -507,6 +524,7 @@ class HexChessEnv(gymnasium.Env):
             ):
                 break
             possibles[index] = next_pos
+            source_pos[index] = pos
             actions_mask[index] = 1
             index += 1
 
@@ -528,6 +546,7 @@ class HexChessEnv(gymnasium.Env):
             ):
                 break
             possibles[index] = next_pos
+            source_pos[index] = pos
             actions_mask[index] = 1
             index += 1
 
@@ -549,6 +568,7 @@ class HexChessEnv(gymnasium.Env):
             ):
                 break
             possibles[index] = next_pos
+            source_pos[index] = pos
             actions_mask[index] = 1
             index += 1
 
@@ -570,6 +590,7 @@ class HexChessEnv(gymnasium.Env):
             ):
                 break
             possibles[index] = next_pos
+            source_pos[index] = pos
             actions_mask[index] = 1
             index += 1
 
@@ -577,7 +598,7 @@ class HexChessEnv(gymnasium.Env):
                 new_row -= 1
             new_col += 1
 
-        return possibles, actions_mask
+        return source_pos, possibles, actions_mask
 
     def reset(self, *, seed=None, options=None) -> np.ndarray:
         self.done = False
@@ -735,30 +756,41 @@ class HexChessEnv(gymnasium.Env):
         assert name in self.pieces_names, f"name not in {self.pieces_names}"
         piece_cat = name.split("_")[0]
         piece_pos = self.pieces[turn][name]
-        src_poses = self.get_source_pos(name, turn)
 
         if piece_cat == "intellector":
-            possibles, actions_mask = self.get_actions_for_intellector(piece_pos, turn)
+            src_poses, possibles, actions_mask = self.get_actions_for_intellector(
+                piece_pos, turn
+            )
             return src_poses, possibles, actions_mask
 
         if piece_cat == "progressor":
-            possibles, actions_mask = self.get_actions_for_progressor(piece_pos, turn)
+            src_poses, possibles, actions_mask = self.get_actions_for_progressor(
+                piece_pos, turn
+            )
             return src_poses, possibles, actions_mask
 
         if piece_cat == "dominator":
-            possibles, actions_mask = self.get_actions_for_dominator(piece_pos, turn)
+            src_poses, possibles, actions_mask = self.get_actions_for_dominator(
+                piece_pos, turn
+            )
             return src_poses, possibles, actions_mask
 
         if piece_cat == "agressor":
-            possibles, actions_mask = self.get_actions_for_agressor(piece_pos, turn)
+            src_poses, possibles, actions_mask = self.get_actions_for_agressor(
+                piece_pos, turn
+            )
             return src_poses, possibles, actions_mask
 
         if piece_cat == "defensor":
-            possibles, actions_mask = self.get_actions_for_defensor(piece_pos, turn)
+            src_poses, possibles, actions_mask = self.get_actions_for_defensor(
+                piece_pos, turn
+            )
             return src_poses, possibles, actions_mask
 
         if piece_cat == "liberator":
-            possibles, actions_mask = self.get_actions_for_liberator(piece_pos, turn)
+            src_poses, possibles, actions_mask = self.get_actions_for_liberator(
+                piece_pos, turn
+            )
             return src_poses, possibles, actions_mask
 
     def get_all_actions(self, turn: int):
