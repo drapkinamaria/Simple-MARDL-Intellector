@@ -7,6 +7,7 @@ from torch.distributions.categorical import Categorical
 from tqdm import tqdm
 import gymnasium
 import os
+import datetime
 
 
 def build_base_model(
@@ -40,15 +41,29 @@ class Actor(nn.Module):
     ) -> None:
         super().__init__()
         self.base_model = build_base_model(
-            state_dim, hidden_layers, action_dim, nn.Softmax(dim=1)
+            state_dim, hidden_layers, action_dim, last_activation=nn.Identity()
         )
 
     def forward(self, states: T.Tensor, action_mask: T.Tensor):
-        x = self.base_model(states)
-        s = action_mask.sum(dim=1)
-        l = ((x * (1 - action_mask)).sum(dim=1) / s).unsqueeze(1)
-        x = (x + l) * action_mask
-        return Categorical(x)
+        logits = self.base_model(states)
+        neg_inf = T.tensor(-1e9, device=logits.device)
+        masked_logits = T.where(action_mask.bool(), logits, neg_inf)
+        return Categorical(logits=masked_logits)
+
+
+class Logger:
+    def __init__(self, path: str):
+        self.path = path
+        with open(self.path, "w") as f:
+            f.write(f"=== Training log started at {datetime.datetime.now()} ===\n")
+
+    def log(self, text: str):
+        with open(self.path, "a") as f:
+            f.write(text + "\n")
+
+    def log_empty_line(self):
+        with open(self.path, "a") as f:
+            f.write("\n")
 
 
 class Critic(nn.Module):
@@ -162,8 +177,12 @@ class PPO(Learning):
         gae_lambda: float = 0.95,
         policy_clip: float = 0.2,
         learning_rate: float = 0.003,
+        log_path: str = None,
     ) -> None:
         super().__init__(environment, epochs, gamma, learning_rate)
+        self.last_actor_grad_norm = 0.0
+        self.last_critic_grad_norm = 0.0
+        self.env = environment
         self.gae_lambda = gae_lambda
         self.policy_clip = policy_clip
         self.buffer = BufferPPO(
@@ -172,6 +191,7 @@ class PPO(Learning):
             batch_size=batch_size,
             gae_lambda=gae_lambda,
         )
+        self.logger = Logger(log_path)
         self.actor = Actor(self.state_dim, self.action_dim, hidden_layers)
         self.critic = Critic(self.state_dim, hidden_layers)
         self.actor_optimizer = optim.Adam(self.actor.parameters(), lr=learning_rate)
@@ -190,9 +210,21 @@ class PPO(Learning):
         probs = T.squeeze(dist.log_prob(action)).item()
         value = T.squeeze(self.critic(state)).item()
         action = T.squeeze(action).item()
+
+        source_pos, target_pos, action_mask_np = self.env.get_all_actions(self.env.turn)
+        from_pos = tuple(source_pos[action])
+        to_pos = tuple(target_pos[action])
+
+        for name, pos in self.env.pieces[self.env.turn].items():
+            if isinstance(pos, tuple) and pos == from_pos:
+                self.logger.log(f"{name} {self.env.turn}: {from_pos} -> {to_pos}")
+                break
+
         return action, probs, value
 
     def epoch(self):
+        actor_grad_norms = []
+        critic_grad_norms = []
         (
             states_arr,
             actions_arr,
@@ -214,6 +246,7 @@ class PPO(Learning):
             dist = self.actor(states, masks)
             critic_value = T.squeeze(self.critic(states))
             new_probs = dist.log_prob(actions)
+
             prob_ratio = (new_probs - old_probs).exp()
             weighted_probs = advantages * prob_ratio
             weighted_clipped_probs = (
@@ -226,8 +259,23 @@ class PPO(Learning):
             self.actor_optimizer.zero_grad()
             self.critic_optimizer.zero_grad()
             total_loss.backward()
+            actor_norm_sq = 0.0
+            for p in self.actor.parameters():
+                if p.grad is not None:
+                    actor_norm_sq += p.grad.data.norm() ** 2
+            critic_norm_sq = 0.0
+            for p in self.critic.parameters():
+                if p.grad is not None:
+                    critic_norm_sq += p.grad.data.norm() ** 2
+
+            actor_grad_norms.append(T.sqrt(actor_norm_sq).item())
+            critic_grad_norms.append(T.sqrt(critic_norm_sq).item())
+
             self.actor_optimizer.step()
             self.critic_optimizer.step()
+
+        self.last_actor_grad_norm = sum(actor_grad_norms) / len(actor_grad_norms)
+        self.last_critic_grad_norm = sum(critic_grad_norms) / len(critic_grad_norms)
 
     def learn(self):
         for epoch in tqdm(

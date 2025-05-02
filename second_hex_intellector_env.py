@@ -5,8 +5,10 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 from intellector.moves import POSSIBLE_MOVES
 import intellector.pieces as pieces
+import intellector.second_rewards as rewards_mod
 
-class HexChessEnv(gymnasium.Env):
+
+class SecondHexIntellectorEnv(gymnasium.Env):
 
     metadata: dict = {
         "render_mode": "human",
@@ -37,6 +39,7 @@ class HexChessEnv(gymnasium.Env):
         self.steps: int = 0
         self.checked: list[bool] = [False, False]
         self.max_steps: int = max_steps
+        self.rewards: list[int] = [rewards_mod.DRAW, rewards_mod.DRAW]
 
         self.FIGURE_SYMBOLS = {
             pieces.PROGRESSOR: "p",
@@ -110,7 +113,7 @@ class HexChessEnv(gymnasium.Env):
 
         return [pieces_white.copy(), pieces_black.copy()]
 
-    def is_valid_move(self, next_pos, turn):
+    def is_valid_move(self, next_pos):
         next_row, next_col = next_pos
 
         excluded_positions = [(6, 1), (6, 3), (6, 5), (6, 7)]
@@ -154,34 +157,27 @@ class HexChessEnv(gymnasium.Env):
         return list(self.pieces[0].keys())
 
     def is_game_done(self):
-        rewards = [0, 0]
         white_intellector_present = np.any(
-            self.board[pieces.WHITE, :, :] == pieces.INTELLECTOR
+            self.board[pieces.WHITE] == pieces.INTELLECTOR
         )
         black_intellector_present = np.any(
-            self.board[pieces.BLACK, :, :] == pieces.INTELLECTOR
+            self.board[pieces.BLACK] == pieces.INTELLECTOR
         )
 
-        if not white_intellector_present:
-            self.done = True
-            rewards = [-10000, 10000]  # Черные выигрывают, белые проигрывают
-        elif not black_intellector_present:
-            self.done = True
-            rewards = [10000, -10000]  # Белые выигрывают, черные проигрывают
-        else:
-            _, _, actions_white = self.get_all_actions(pieces.WHITE)
-            _, _, actions_black = self.get_all_actions(pieces.BLACK)
-            if np.sum(actions_white) == 0:
-                self.done = True
-                rewards = [-100, 100]  # Белые не могут ходить, черные выигрывают
-            elif np.sum(actions_black) == 0:
-                self.done = True
-                rewards = [100, -100]  # Черные не могут ходить, белые выигрывают
-            elif self.steps >= self.max_steps:
-                self.done = True
-                rewards = [0, 0]  # Ничья
+        _, _, mask_w = self.get_all_actions(pieces.WHITE)
+        _, _, mask_b = self.get_all_actions(pieces.BLACK)
 
-        return self.done, rewards
+        if (not white_intellector_present) or (mask_w.sum() == 0):
+            self.done = True
+            self.rewards = [rewards_mod.LOSE_REWARD, rewards_mod.WIN_REWARD]
+        elif (not black_intellector_present) or (mask_b.sum() == 0):
+            self.done = True
+            self.rewards = [rewards_mod.WIN_REWARD, rewards_mod.LOSE_REWARD]
+        elif self.steps >= self.max_steps:
+            self.done = True
+            self.rewards = [rewards_mod.DRAW_REWARD, rewards_mod.DRAW_REWARD]
+
+        return self.done, self.rewards
 
     def is_empty(self, pos, turn: int) -> bool:
         return self.board[turn, pos[0], pos[1]] == pieces.EMPTY
@@ -266,9 +262,7 @@ class HexChessEnv(gymnasium.Env):
         # Horizontal moves to the right
         for i in range(col + 2, self.grid_width, 2):
             next_pos = (row, i)
-            if not self.is_valid_move(next_pos, turn) or not self.is_empty(
-                next_pos, turn
-            ):
+            if not self.is_valid_move(next_pos) or not self.is_empty(next_pos, turn):
                 break
             possibles[index] = next_pos
             source_pos[index] = pos
@@ -278,9 +272,7 @@ class HexChessEnv(gymnasium.Env):
         # Horizontal moves to the left
         for i in range(col - 2, -1, -2):
             next_pos = (row, i)
-            if not self.is_valid_move(next_pos, turn) or not self.is_empty(
-                next_pos, turn
-            ):
+            if not self.is_valid_move(next_pos) or not self.is_empty(next_pos, turn):
                 break
             possibles[index] = next_pos
             source_pos[index] = pos
@@ -295,7 +287,7 @@ class HexChessEnv(gymnasium.Env):
                 new_col -= 1
                 new_row += 1
                 next_pos = (new_row, new_col)
-                if not self.is_valid_move(next_pos, turn) or not self.is_empty(
+                if not self.is_valid_move(next_pos) or not self.is_empty(
                     next_pos, turn
                 ):
                     break
@@ -303,7 +295,7 @@ class HexChessEnv(gymnasium.Env):
                 new_col -= 1
                 new_row += 2
                 next_pos = (new_row, new_col)
-                if not self.is_valid_move(next_pos, turn) or not self.is_empty(
+                if not self.is_valid_move(next_pos) or not self.is_empty(
                     next_pos, turn
                 ):
                     break
@@ -319,7 +311,7 @@ class HexChessEnv(gymnasium.Env):
                 new_col += 1
                 new_row += 1
                 next_pos = (new_row, new_col)
-                if not self.is_valid_move(next_pos, turn) or not self.is_empty(
+                if not self.is_valid_move(next_pos) or not self.is_empty(
                     next_pos, turn
                 ):
                     break
@@ -327,7 +319,7 @@ class HexChessEnv(gymnasium.Env):
                 new_col += 1
                 new_row += 2
                 next_pos = (new_row, new_col)
-                if not self.is_valid_move(next_pos, turn) or not self.is_empty(
+                if not self.is_valid_move(next_pos) or not self.is_empty(
                     next_pos, turn
                 ):
                     break
@@ -343,7 +335,7 @@ class HexChessEnv(gymnasium.Env):
                 new_col -= 1
                 new_row -= 2
                 next_pos = (new_row, new_col)
-                if not self.is_valid_move(next_pos, turn) or not self.is_empty(
+                if not self.is_valid_move(next_pos) or not self.is_empty(
                     next_pos, turn
                 ):
                     break
@@ -351,7 +343,7 @@ class HexChessEnv(gymnasium.Env):
                 new_col -= 1
                 new_row -= 1
                 next_pos = (new_row, new_col)
-                if not self.is_valid_move(next_pos, turn) or not self.is_empty(
+                if not self.is_valid_move(next_pos) or not self.is_empty(
                     next_pos, turn
                 ):
                     break
@@ -367,7 +359,7 @@ class HexChessEnv(gymnasium.Env):
                 new_col += 1
                 new_row -= 2
                 next_pos = (new_row, new_col)
-                if not self.is_valid_move(next_pos, turn) or not self.is_empty(
+                if not self.is_valid_move(next_pos) or not self.is_empty(
                     next_pos, turn
                 ):
                     break
@@ -375,7 +367,7 @@ class HexChessEnv(gymnasium.Env):
                 new_col += 1
                 new_row -= 1
                 next_pos = (new_row, new_col)
-                if not self.is_valid_move(next_pos, turn) or not self.is_empty(
+                if not self.is_valid_move(next_pos) or not self.is_empty(
                     next_pos, turn
                 ):
                     break
@@ -396,15 +388,14 @@ class HexChessEnv(gymnasium.Env):
         intellector_moves = self.adjacent_hexes(row, col)
         for i, (r, c) in enumerate(intellector_moves):
             next_pos = (r, c)
-            if self.is_valid_move(next_pos, turn):
-                if self.is_defensor(next_pos, turn):
-                    possibles[i] = next_pos
-                    source_pos[i] = pos
-                    actions_mask[i] = 1
-                elif self.is_empty(next_pos, turn):
-                    possibles[i] = next_pos
-                    source_pos[i] = pos
-                    actions_mask[i] = 1
+            if not self.is_valid_move(next_pos):
+                continue
+            if self.is_enemy(next_pos, turn):
+                continue
+            if self.is_defensor(next_pos, turn) or self.is_empty(next_pos, turn):
+                possibles[i] = next_pos
+                source_pos[i] = pos
+                actions_mask[i] = 1
 
         return source_pos, possibles, actions_mask
 
@@ -418,7 +409,7 @@ class HexChessEnv(gymnasium.Env):
         defensor_moves = self.adjacent_hexes(row, col)
         for i, (r, c) in enumerate(defensor_moves):
             next_pos = (r, c)
-            if self.is_valid_move(next_pos, turn):
+            if self.is_valid_move(next_pos):
                 if self.is_intellector(next_pos, turn):
                     possibles[i] = next_pos
                     source_pos[i] = pos
@@ -440,7 +431,7 @@ class HexChessEnv(gymnasium.Env):
         for i, (r, c) in enumerate(liberator_moves):
             next_pos = (r, c)
             if (
-                not self.is_valid_move(next_pos, turn)
+                not self.is_valid_move(next_pos)
                 or self.board[turn, r, c] != pieces.EMPTY
                 or self.board[1 - turn, r, c] != pieces.EMPTY
             ):
@@ -461,9 +452,7 @@ class HexChessEnv(gymnasium.Env):
 
         for i, (r, c) in enumerate(moves):
             next_pos = (r, c)
-            if not self.is_valid_move(next_pos, turn) or not self.is_empty(
-                next_pos, turn
-            ):
+            if not self.is_valid_move(next_pos) or not self.is_empty(next_pos, turn):
                 continue
 
             possibles[i + 6] = next_pos
@@ -483,9 +472,7 @@ class HexChessEnv(gymnasium.Env):
         # Vertical moves downward
         for i in range(row + 1, self.grid_height):
             next_pos = (i, col)
-            if not self.is_valid_move(next_pos, turn) or not self.is_empty(
-                next_pos, turn
-            ):
+            if not self.is_valid_move(next_pos) or not self.is_empty(next_pos, turn):
                 break
             possibles[index] = next_pos
             actions_mask[index] = 1
@@ -495,9 +482,7 @@ class HexChessEnv(gymnasium.Env):
         # Vertical moves upward
         for i in range(row - 1, -1, -1):
             next_pos = (i, col)
-            if not self.is_valid_move(next_pos, turn) or not self.is_empty(
-                next_pos, turn
-            ):
+            if not self.is_valid_move(next_pos) or not self.is_empty(next_pos, turn):
                 break
             if self.is_enemy(next_pos, turn):
                 possibles[index] = next_pos
@@ -519,9 +504,7 @@ class HexChessEnv(gymnasium.Env):
             else:
                 next_pos = (new_row + 1, new_col - 1)
 
-            if not self.is_valid_move(next_pos, turn) or not self.is_empty(
-                next_pos, turn
-            ):
+            if not self.is_valid_move(next_pos) or not self.is_empty(next_pos, turn):
                 break
             possibles[index] = next_pos
             source_pos[index] = pos
@@ -541,9 +524,7 @@ class HexChessEnv(gymnasium.Env):
             else:
                 next_pos = (new_row, new_col - 1)
 
-            if not self.is_valid_move(next_pos, turn) or not self.is_empty(
-                next_pos, turn
-            ):
+            if not self.is_valid_move(next_pos) or not self.is_empty(next_pos, turn):
                 break
             possibles[index] = next_pos
             source_pos[index] = pos
@@ -563,9 +544,7 @@ class HexChessEnv(gymnasium.Env):
             else:
                 next_pos = (new_row + 1, new_col + 1)
 
-            if not self.is_valid_move(next_pos, turn) or not self.is_empty(
-                next_pos, turn
-            ):
+            if not self.is_valid_move(next_pos) or not self.is_empty(next_pos, turn):
                 break
             possibles[index] = next_pos
             source_pos[index] = pos
@@ -585,9 +564,7 @@ class HexChessEnv(gymnasium.Env):
             else:
                 next_pos = (new_row, new_col + 1)
 
-            if not self.is_valid_move(next_pos, turn) or not self.is_empty(
-                next_pos, turn
-            ):
+            if not self.is_valid_move(next_pos) or not self.is_empty(next_pos, turn):
                 break
             possibles[index] = next_pos
             source_pos[index] = pos
@@ -607,6 +584,7 @@ class HexChessEnv(gymnasium.Env):
         self.board = self.init_board()
         self.pieces = self.init_pieces()
         self.checked = [False, False]
+        self.rewards = [rewards_mod.DRAW, rewards_mod.DRAW]
         state = self.get_state(self.turn)
         return state
 
@@ -672,7 +650,7 @@ class HexChessEnv(gymnasium.Env):
                 self.draw_piece_from_board(ax, row, col, x, y, col_letters)
 
         self.set_plot_limits(ax, dx, dy)
-        self.display_plot(fig, mode)
+        self.display_plot(mode)
 
     def get_col_letters(self):
         return {
@@ -703,7 +681,6 @@ class HexChessEnv(gymnasium.Env):
         ax.add_patch(hexagon)
 
     def draw_piece_from_board(self, ax, row, col, x, y, col_letters):
-        # Определение, какая фигура находится на позиции (учитываются оба массива)
         white_figure = self.board[0, row - 1, col - 1]
         black_figure = self.board[1, row - 1, col - 1]
 
@@ -748,7 +725,7 @@ class HexChessEnv(gymnasium.Env):
         ax.invert_yaxis()
 
     @staticmethod
-    def display_plot(fig, mode):
+    def display_plot(mode):
         if mode == "human":
             plt.show()
 
@@ -815,6 +792,8 @@ class HexChessEnv(gymnasium.Env):
             turn == pieces.BLACK and row == 0
         ):
             self.board[turn, row, col] = pieces.DOMINATOR
+            return rewards_mod.PROMOTION_REWARD
+        return rewards_mod.DRAW
 
     def swap_intellector_defensor(self, current_pos, next_pos, turn: int):
         current_row, current_col = current_pos
@@ -844,90 +823,101 @@ class HexChessEnv(gymnasium.Env):
                     elif value[0] == next_row and value[1] == next_col:
                         self.pieces[turn][key] = current_pos
 
-            rewards = [0, 0]
+            rewards = [rewards_mod.DRAW, rewards_mod.DRAW]
             return True, rewards, [set(), set()]
 
         return False, None, None
 
-    def move_piece(self, current_pos, next_pos, turn: int):
-        next_row, next_col = next_pos
-        current_row, current_col = current_pos
+    def move_piece(self, current_pos, next_pos, turn):
+        curr_r, curr_c = int(current_pos[0]), int(current_pos[1])
+        next_r, next_c = int(next_pos[0]), int(next_pos[1])
+        current_pos = (curr_r, curr_c)
+        next_pos = (next_r, next_c)
 
-        swapped, rewards, infos = self.swap_intellector_defensor(
+        swapped, step_rewards, infos = self.swap_intellector_defensor(
             current_pos, next_pos, turn
         )
         if swapped:
-            return rewards, infos
+            return step_rewards, infos
 
-        self.promote_progressor(next_pos, turn)
+        step_rewards = [rewards_mod.DRAW, rewards_mod.DRAW]
 
-        # Удаление фигуры противника, если она есть на новой позиции
-        if self.board[1 - turn, next_row, next_col] != pieces.EMPTY:
-            self.board[1 - turn, next_row, next_col] = pieces.EMPTY
-            to_remove = None
-            for key, value in self.pieces[1 - turn].items():
-                if (
-                    isinstance(value, tuple)
-                    and value[0] == next_row
-                    and value[1] == next_col
-                ):
-                    to_remove = key
+        target_val = self.board[1 - turn, next_r, next_c]
+        if target_val != pieces.EMPTY:
+            step_rewards[turn] += rewards_mod.CAPTURE_REWARDS.get(target_val, 0)
+            self.board[1 - turn, next_r, next_c] = pieces.EMPTY
+            for key, pos in list(self.pieces[1 - turn].items()):
+                if pos == next_pos:
+                    self.pieces[1 - turn][key] = None
                     break
-            if to_remove:
-                self.pieces[1 - turn][to_remove] = None
 
-        # Перемещение фигуры игрока на новую позицию
-        self.board[turn, next_row, next_col] = self.board[
-            turn, current_row, current_col
-        ]
-        self.board[turn, current_row, current_col] = pieces.EMPTY
+        self.board[turn, next_r, next_c] = self.board[turn, curr_r, curr_c]
+        self.board[turn, curr_r, curr_c] = pieces.EMPTY
 
-        # Обновление позиции в списке фигур
-        for key, value in self.pieces[turn].items():
-            if (
-                isinstance(value, tuple)
-                and value[0] == current_row
-                and value[1] == current_col
-            ):
+        promo_r = self.promote_progressor(next_pos, turn)
+        step_rewards[turn] += promo_r
+
+        for key, pos in list(self.pieces[turn].items()):
+            if pos == current_pos:
                 self.pieces[turn][key] = next_pos
+                break
 
-        rewards = [0, 0]
-        return rewards, [set(), set()]
+        return step_rewards, [set(), set()]
 
     def step(self, action: int):
-        done, rewards = self.is_game_done()
+        done, final_rewards = self.is_game_done()
         if done:
             observation = self.get_state(self.turn)
-            return observation, rewards, done, self.steps >= self.max_steps, {}
+            return observation, final_rewards, True, self.steps >= self.max_steps, {}
 
         if action >= self.space_size:
             observation = self.get_state(self.turn)
             done, rewards = self.is_game_done()
-            return observation, [0, 0], done, self.steps >= self.max_steps, {}
+            return (
+                observation,
+                [rewards_mod.DRAW, rewards_mod.DRAW],
+                done,
+                self.steps >= self.max_steps,
+                {},
+            )
 
-        # Пропустить действие, если action равно 0
         if action == 0:
             observation = self.get_state(self.turn)
             self.turn = 1 - self.turn
             self.steps += 1
             done, rewards = self.is_game_done()
-            return observation, [0, 0], done, self.steps >= self.max_steps, {}
+            return (
+                observation,
+                [rewards_mod.DRAW, rewards_mod.DRAW],
+                done,
+                self.steps >= self.max_steps,
+                {},
+            )
 
         source_pos, possibles, actions_mask = self.get_all_actions(self.turn)
-
         if not actions_mask[action]:
             observation = self.get_state(self.turn)
             done, rewards = self.is_game_done()
-            return observation, [0, 0], done, self.steps >= self.max_steps, {}
+            return (
+                observation,
+                [rewards_mod.DRAW, rewards_mod.DRAW],
+                done,
+                self.steps >= self.max_steps,
+                {},
+            )
 
-        rewards, infos = self.move_piece(
+        step_rewards, infos = self.move_piece(
             source_pos[action], possibles[action], self.turn
         )
+
         observation = self.get_state(self.turn)
         self.turn = 1 - self.turn
         self.steps += 1
-        done, game_rewards = self.is_game_done()
-        rewards = [
-            sum(x) for x in zip(rewards, game_rewards)
-        ]  # Суммировать награды текущего хода и конца игры
-        return observation, rewards, done, self.steps >= self.max_steps, {}
+
+        done, final_rewards = self.is_game_done()
+        total_rewards = [
+            step_rewards[0] + final_rewards[0],
+            step_rewards[1] + final_rewards[1],
+        ]
+
+        return observation, total_rewards, done, self.steps >= self.max_steps, {}
