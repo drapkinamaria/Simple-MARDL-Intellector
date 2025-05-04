@@ -6,6 +6,7 @@ import matplotlib.patches as patches
 from intellector.moves import POSSIBLE_MOVES
 import intellector.pieces as pieces
 import intellector.first_rewards as rewards_mod
+import intellector.status as status
 
 
 class HexIntellectorEnv(gymnasium.Env):
@@ -40,6 +41,9 @@ class HexIntellectorEnv(gymnasium.Env):
         self.checked: list[bool] = [False, False]
         self.max_steps: int = max_steps
         self.rewards: list[int] = [rewards_mod.DRAW, rewards_mod.DRAW]
+        self.base_line_black = [(0, 0), (0, 2), (0, 4), (0, 6), (0, 8)]
+        self.base_line_white = [(6, 0), (6, 2), (6, 4), (6, 6), (6, 8)]
+        self.winner = status.NO_WINNER
 
         self.FIGURE_SYMBOLS = {
             pieces.PROGRESSOR: "p",
@@ -164,18 +168,41 @@ class HexIntellectorEnv(gymnasium.Env):
             self.board[pieces.BLACK] == pieces.INTELLECTOR
         )
 
+        if white_intellector_present:
+            pos_white = tuple(
+                np.argwhere(self.board[pieces.WHITE] == pieces.INTELLECTOR)[0]
+            )
+            if pos_white in self.base_line_white:
+                self.done = True
+                self.rewards = [rewards_mod.WIN, rewards_mod.LOSE]
+                self.winner = status.WHITE_WINNER
+                return self.done, self.rewards
+
+        if black_intellector_present:
+            pos_black = tuple(
+                np.argwhere(self.board[pieces.BLACK] == pieces.INTELLECTOR)[0]
+            )
+            if pos_black in self.base_line_black:
+                self.done = True
+                self.rewards = [rewards_mod.LOSE, rewards_mod.WIN]
+                self.winner = status.BLACK_WINNER
+                return self.done, self.rewards
+
         _, _, mask_w = self.get_all_actions(pieces.WHITE)
         _, _, mask_b = self.get_all_actions(pieces.BLACK)
 
         if (not white_intellector_present) or (mask_w.sum() == 0):
             self.done = True
             self.rewards = [rewards_mod.LOSE, rewards_mod.WIN]
+            self.winner = status.BLACK_WINNER
         elif (not black_intellector_present) or (mask_b.sum() == 0):
             self.done = True
             self.rewards = [rewards_mod.WIN, rewards_mod.LOSE]
+            self.winner = status.WHITE_WINNER
         elif self.steps >= self.max_steps:
             self.done = True
             self.rewards = [rewards_mod.DRAW, rewards_mod.DRAW]
+            self.winner = status.DRAW_WINNER
 
         return self.done, self.rewards
 
@@ -585,6 +612,7 @@ class HexIntellectorEnv(gymnasium.Env):
         self.pieces = self.init_pieces()
         self.checked = [False, False]
         self.rewards = [rewards_mod.DRAW, rewards_mod.DRAW]
+        self.winner = status.NO_WINNER
         state = self.get_state(self.turn)
         return state
 
@@ -788,8 +816,9 @@ class HexIntellectorEnv(gymnasium.Env):
 
     def promote_progressor(self, pos, turn: int):
         row, col = pos
-        if (turn == pieces.WHITE and row == self.grid_height - 1) or (
-            turn == pieces.BLACK and row == 0
+        if self.board[turn, pos[0], pos[1]] == pieces.PROGRESSOR and (
+            (turn == pieces.WHITE and pos in self.base_line_white)
+            or (turn == pieces.BLACK and pos in self.base_line_black)
         ):
             self.board[turn, row, col] = pieces.DOMINATOR
 
@@ -861,7 +890,13 @@ class HexIntellectorEnv(gymnasium.Env):
         done, rewards = self.is_game_done()
         if done:
             observation = self.get_state(self.turn)
-            return observation, rewards, done, self.steps >= self.max_steps, {}
+            return (
+                observation,
+                rewards,
+                done,
+                self.steps >= self.max_steps,
+                {"winner": self.winner},
+            )
 
         if action >= self.space_size:
             observation = self.get_state(self.turn)
@@ -871,7 +906,7 @@ class HexIntellectorEnv(gymnasium.Env):
                 [rewards_mod.DRAW, rewards_mod.DRAW],
                 done,
                 self.steps >= self.max_steps,
-                {},
+                {"winner": self.winner},
             )
 
         if action == 0:
@@ -884,7 +919,7 @@ class HexIntellectorEnv(gymnasium.Env):
                 [rewards_mod.DRAW, rewards_mod.DRAW],
                 done,
                 self.steps >= self.max_steps,
-                {},
+                {"winner": self.winner},
             )
 
         source_pos, possibles, actions_mask = self.get_all_actions(self.turn)
@@ -897,7 +932,7 @@ class HexIntellectorEnv(gymnasium.Env):
                 [rewards_mod.DRAW, rewards_mod.DRAW],
                 done,
                 self.steps >= self.max_steps,
-                {},
+                {"winner": self.winner},
             )
 
         rewards, infos = self.move_piece(
@@ -908,4 +943,10 @@ class HexIntellectorEnv(gymnasium.Env):
         self.steps += 1
         done, game_rewards = self.is_game_done()
         rewards = [sum(x) for x in zip(rewards, game_rewards)]
-        return observation, rewards, done, self.steps >= self.max_steps, {}
+        return (
+            observation,
+            rewards,
+            done,
+            self.steps >= self.max_steps,
+            {"winner": self.winner},
+        )

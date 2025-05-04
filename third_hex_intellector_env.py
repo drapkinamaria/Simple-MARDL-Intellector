@@ -5,11 +5,11 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 from intellector.moves import POSSIBLE_MOVES
 import intellector.pieces as pieces
-import intellector.second_rewards as rewards_mod
+import intellector.third_rewards as rewards_mod
 import intellector.status as status
 
 
-class SecondHexIntellectorEnv(gymnasium.Env):
+class ThirdHexIntellectorEnv(gymnasium.Env):
 
     metadata: dict = {
         "render_mode": "human",
@@ -821,8 +821,6 @@ class SecondHexIntellectorEnv(gymnasium.Env):
             or (turn == pieces.BLACK and pos in self.base_line_black)
         ):
             self.board[turn, row, col] = pieces.DOMINATOR
-            return rewards_mod.PROMOTION_REWARD
-        return rewards_mod.DRAW
 
     def swap_intellector_defensor(self, current_pos, next_pos, turn: int):
         current_row, current_col = current_pos
@@ -872,8 +870,8 @@ class SecondHexIntellectorEnv(gymnasium.Env):
         step_rewards = [rewards_mod.DRAW, rewards_mod.DRAW]
 
         target_val = self.board[1 - turn, next_r, next_c]
-        if target_val != pieces.EMPTY:
-            step_rewards[turn] += rewards_mod.CAPTURE_REWARDS.get(target_val, 0)
+        if target_val == pieces.INTELLECTOR:
+            step_rewards[turn] += rewards_mod.CAPTURE_REWARDS[pieces.INTELLECTOR]
             self.board[1 - turn, next_r, next_c] = pieces.EMPTY
             for key, pos in list(self.pieces[1 - turn].items()):
                 if pos == next_pos:
@@ -883,8 +881,7 @@ class SecondHexIntellectorEnv(gymnasium.Env):
         self.board[turn, next_r, next_c] = self.board[turn, curr_r, curr_c]
         self.board[turn, curr_r, curr_c] = pieces.EMPTY
 
-        promo_r = self.promote_progressor(next_pos, turn)
-        step_rewards[turn] += promo_r
+        self.promote_progressor(next_pos, turn)
 
         for key, pos in list(self.pieces[turn].items()):
             if pos == current_pos:

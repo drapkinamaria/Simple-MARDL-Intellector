@@ -1,5 +1,6 @@
 from hex_intellector_env import HexIntellectorEnv
 from second_hex_intellector_env import SecondHexIntellectorEnv
+from third_hex_intellector_env import ThirdHexIntellectorEnv
 from learning import PPO, Episode
 import os
 
@@ -37,7 +38,7 @@ def make_or_load(name):
 
 def train_ppo(agents, env, black_model_name, white_model_name, metrics_filename):
     metrics_path = os.path.join(save_folder, metrics_filename)
-    with open(metrics_path, "w") as metrics_file:
+    with open(metrics_path, "w", encoding="utf-8") as metrics_file:
         metrics_file.write(
             "episode, winner, "
             "reward_black, reward_white, steps_to_finish, "
@@ -47,6 +48,7 @@ def train_ppo(agents, env, black_model_name, white_model_name, metrics_filename)
 
         black_wins = 0
         white_wins = 0
+        draws = 0
 
         for episode in range(num_episodes):
             step_count = 0
@@ -56,20 +58,20 @@ def train_ppo(agents, env, black_model_name, white_model_name, metrics_filename)
             total_reward_white = 0
             current_turn = 0  # 0 - black, 1 - white
 
+            for agent in agents:
+                agent.logger.log(f"Игра {episode + 1}")
+
             while not done:
                 step_count += 1
                 current_agent = agents[current_turn]
                 _, _, action_mask = env.get_all_actions(current_turn)
                 action, log_prob, value = current_agent.take_action(state, action_mask)
-                next_state, rewards, terminated, truncated, _ = env.step(action)
+                next_state, rewards, terminated, truncated, info = env.step(action)
                 done = terminated or truncated
 
                 reward = rewards[current_turn]
                 total_reward_white += rewards[0]
                 total_reward_black += rewards[1]
-
-                reward_white = rewards[0]
-                reward_black = rewards[1]
 
                 ep = Episode()
                 ep.add(
@@ -86,14 +88,13 @@ def train_ppo(agents, env, black_model_name, white_model_name, metrics_filename)
                 state = next_state
                 current_turn = 1 - current_turn
 
-            if reward_black > reward_white:
-                winner = "black"
+            winner = info.get("winner", None)
+            if winner == "black":
                 black_wins += 1
-            elif reward_white > reward_black:
-                winner = "white"
+            elif winner == "white":
                 white_wins += 1
-            else:
-                winner = "draw"
+            elif winner == "draw":
+                draws += 1
 
             gb_actor = agents[0].last_actor_grad_norm
             gb_critic = agents[0].last_critic_grad_norm
@@ -104,14 +105,15 @@ def train_ppo(agents, env, black_model_name, white_model_name, metrics_filename)
                 f"{episode + 1}, {winner}, "
                 f"{total_reward_black:.2f}, {total_reward_white:.2f}, "
                 f"{step_count}, "
-                f"{gb_actor:.6f}, {gb_critic:.6f}, "
-                f"{gw_actor:.6f}, {gw_critic:.6f}\n"
+                f"{gb_actor:.6e}, {gb_critic:.6f}, "
+                f"{gw_actor:.6e}, {gw_critic:.6f}\n"
             )
 
             # обучаем после эпизода
             for agent in agents:
                 agent.learn()
-                agent.logger.log_empty_line()
+
+            agents[0].logger.log_empty_line()
 
             print(f"[{metrics_filename}] Episode {episode+1}/{num_episodes}")
 
@@ -190,15 +192,43 @@ ppo2_white = PPO(
     moves_log2,
 )
 
-if os.path.exists(os.path.join(save_folder, f"{black_name2}.pt")):
-    ppo2_black.load(save_folder, black_name2)
-if os.path.exists(os.path.join(save_folder, f"{white_name2}.pt")):
-    ppo2_white.load(save_folder, white_name2)
-
 train_ppo(
     [ppo2_black, ppo2_white],
     env2,
     black_name2,
     white_name2,
     metrics_file2,
+)
+
+env3 = ThirdHexIntellectorEnv()
+ppo3_black = PPO(
+    env3,
+    hidden_layers,
+    epochs,
+    buffer_size,
+    batch_size,
+    gamma,
+    gae_lambda,
+    policy_clip,
+    learning_rate,
+    log_path=os.path.join(save_folder, "moves_third.txt"),
+)
+ppo3_white = PPO(
+    env3,
+    hidden_layers,
+    epochs,
+    buffer_size,
+    batch_size,
+    gamma,
+    gae_lambda,
+    policy_clip,
+    learning_rate,
+    log_path=os.path.join(save_folder, "moves_third.txt"),
+)
+train_ppo(
+    [ppo3_black, ppo3_white],
+    env3,
+    "ppo_hex_black_third",
+    "ppo_hex_white_third",
+    "training_metrics_third.txt",
 )
