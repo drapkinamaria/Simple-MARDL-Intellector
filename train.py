@@ -8,15 +8,14 @@ save_folder = "./"
 os.makedirs(save_folder, exist_ok=True)
 
 hidden_layers = (2048, 2048)
-num_episodes = 20
+num_episodes = 2000
 gamma = 0.99
 gae_lambda = 0.95
 policy_clip = 0.2
 learning_rate = 0.003
 buffer_size = 2048
 batch_size = 128
-epochs = 200
-
+epochs = 500
 
 def make_or_load(name):
     model = PPO(
