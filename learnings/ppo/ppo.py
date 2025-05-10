@@ -1,34 +1,37 @@
+import os
+import gymnasium
 import numpy as np
 import torch as T
 import torch.optim as optim
-from logger import Logger
+
+from tqdm import tqdm
+from buffer.ppo import BufferPPO
+from buffer.episode import Episode
+from learning import Logger
+
 from learnings.base import Learning
 from learnings.ppo.actor import Actor
 from learnings.ppo.critic import Critic
-from buffer.episode import Episode
-from buffer.ppo.module import BufferPPO
-from tqdm import tqdm
-import gymnasium
-import os
+
 
 class PPO(Learning):
     def __init__(
-        self,
-        environment: gymnasium.Env,
-        hidden_layers: tuple[int],
-        epochs: int,
-        buffer_size: int,
-        batch_size: int,
-        gamma: float = 0.99,
-        gae_lambda: float = 0.95,
-        policy_clip: float = 0.2,
-        learning_rate: float = 0.003,
-        log_path: str = None,
+            self,
+            environment: gymnasium.Env,
+            hidden_layers: tuple[int],
+            epochs: int,
+            buffer_size: int,
+            batch_size: int,
+            gamma: float = 0.99,
+            gae_lambda: float = 0.95,
+            policy_clip: float = 0.2,
+            learning_rate: float = 0.003,
+            log_path: str = None,
     ) -> None:
         super().__init__(environment, epochs, gamma, learning_rate)
+
         self.last_actor_grad_norm = 0.0
         self.last_critic_grad_norm = 0.0
-        self.env = environment
         self.gae_lambda = gae_lambda
         self.policy_clip = policy_clip
         self.buffer = BufferPPO(
@@ -37,22 +40,21 @@ class PPO(Learning):
             batch_size=batch_size,
             gae_lambda=gae_lambda,
         )
+
         self.logger = Logger(log_path)
+        self.hidden_layers = hidden_layers
         self.actor = Actor(self.state_dim, self.action_dim, hidden_layers)
         self.critic = Critic(self.state_dim, hidden_layers)
         self.actor_optimizer = optim.Adam(self.actor.parameters(), lr=learning_rate)
         self.critic_optimizer = optim.Adam(self.critic.parameters(), lr=learning_rate)
+
         self.to(self.device)
 
     def take_action(self, state: np.ndarray, action_mask: np.ndarray):
-        state = T.FloatTensor(state).unsqueeze(0).to(self.device)
-        action_mask = T.FloatTensor(action_mask).unsqueeze(0).to(self.device)
+        state = T.Tensor(state).unsqueeze(0).to(self.device)
+        action_mask = T.Tensor(action_mask).unsqueeze(0).to(self.device)
         dist = self.actor(state, action_mask)
         action = dist.sample()
-
-        while not action_mask[0, action].item():
-            action = dist.sample()
-
         probs = T.squeeze(dist.log_prob(action)).item()
         value = T.squeeze(self.critic(state)).item()
         action = T.squeeze(action).item()
@@ -82,6 +84,7 @@ class PPO(Learning):
             advantages_arr,
             batches,
         ) = self.buffer.sample()
+
         for batch in batches:
             masks = T.Tensor(masks_arr[batch]).to(self.device)
             values = T.Tensor(values_arr[batch]).to(self.device)
@@ -89,22 +92,27 @@ class PPO(Learning):
             actions = T.Tensor(actions_arr[batch]).to(self.device)
             old_probs = T.Tensor(old_probs_arr[batch]).to(self.device)
             advantages = T.Tensor(advantages_arr[batch]).to(self.device)
+
             dist = self.actor(states, masks)
             critic_value = T.squeeze(self.critic(states))
-            new_probs = dist.log_prob(actions)
 
+            new_probs = dist.log_prob(actions)
             prob_ratio = (new_probs - old_probs).exp()
+
             weighted_probs = advantages * prob_ratio
             weighted_clipped_probs = (
-                T.clamp(prob_ratio, 1 - self.policy_clip, 1 + self.policy_clip)
-                * advantages
+                    T.clamp(prob_ratio, 1 - self.policy_clip, 1 + self.policy_clip)
+                    * advantages
             )
+
             actor_loss = -T.min(weighted_probs, weighted_clipped_probs).mean()
             critic_loss = ((advantages + values - critic_value) ** 2).mean()
             total_loss = actor_loss + 0.5 * critic_loss
+
             self.actor_optimizer.zero_grad()
             self.critic_optimizer.zero_grad()
             total_loss.backward()
+
             actor_norm_sq = 0.0
             for p in self.actor.parameters():
                 if p.grad is not None:
@@ -120,13 +128,8 @@ class PPO(Learning):
             self.actor_optimizer.step()
             self.critic_optimizer.step()
 
-        self.last_actor_grad_norm = sum(actor_grad_norms) / len(actor_grad_norms)
-        self.last_critic_grad_norm = sum(critic_grad_norms) / len(critic_grad_norms)
-
     def learn(self):
-        for epoch in tqdm(
-            range(self.epochs), desc="PPO Learning...", ncols=64, leave=False
-        ):
+        for epoch in tqdm(range(self.epochs), desc="PPO Learning...", ncols=64, leave=False):
             self.epoch()
         self.buffer.clear()
 

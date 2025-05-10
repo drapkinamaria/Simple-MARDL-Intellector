@@ -8,7 +8,6 @@ import intellector.pieces as pieces
 import intellector.first_rewards as rewards_mod
 import intellector.status as status
 
-
 class HexIntellectorEnv(gymnasium.Env):
 
     metadata: dict = {
