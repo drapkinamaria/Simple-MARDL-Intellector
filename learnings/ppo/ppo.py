@@ -29,9 +29,9 @@ class PPO(Learning):
         log_path: str = None,
     ) -> None:
         super().__init__(environment, epochs, gamma, learning_rate)
-
         self.last_actor_grad_norm = 0.0
         self.last_critic_grad_norm = 0.0
+        self.env = environment
         self.gae_lambda = gae_lambda
         self.policy_clip = policy_clip
         self.buffer = BufferPPO(
@@ -40,14 +40,12 @@ class PPO(Learning):
             batch_size=batch_size,
             gae_lambda=gae_lambda,
         )
-
         self.logger = Logger(log_path)
         self.hidden_layers = hidden_layers
         self.actor = Actor(self.state_dim, self.action_dim, hidden_layers)
         self.critic = Critic(self.state_dim, hidden_layers)
         self.actor_optimizer = optim.Adam(self.actor.parameters(), lr=learning_rate)
         self.critic_optimizer = optim.Adam(self.critic.parameters(), lr=learning_rate)
-
         self.to(self.device)
 
     def take_action(self, state: np.ndarray, action_mask: np.ndarray):
@@ -55,6 +53,10 @@ class PPO(Learning):
         action_mask = T.Tensor(action_mask).unsqueeze(0).to(self.device)
         dist = self.actor(state, action_mask)
         action = dist.sample()
+
+        while not action_mask[0, action].item():
+            action = dist.sample()
+
         probs = T.squeeze(dist.log_prob(action)).item()
         value = T.squeeze(self.critic(state)).item()
         action = T.squeeze(action).item()
@@ -94,6 +96,7 @@ class PPO(Learning):
             advantages = T.Tensor(advantages_arr[batch]).to(self.device)
 
             dist = self.actor(states, masks)
+            entropy = dist.entropy().mean()
             critic_value = T.squeeze(self.critic(states))
 
             new_probs = dist.log_prob(actions)
@@ -105,7 +108,9 @@ class PPO(Learning):
                 * advantages
             )
 
-            actor_loss = -T.min(weighted_probs, weighted_clipped_probs).mean()
+            actor_loss = (
+                -T.min(weighted_probs, weighted_clipped_probs).mean() + 0.01 * entropy
+            )
             critic_loss = ((advantages + values - critic_value) ** 2).mean()
             total_loss = actor_loss + 0.5 * critic_loss
 

@@ -91,6 +91,7 @@ class PPO(Learning):
             old_probs = T.Tensor(old_probs_arr[batch]).to(self.device)
             advantages = T.Tensor(advantages_arr[batch]).to(self.device)
             dist = self.actor(states, masks)
+            entropy = dist.entropy().mean()
             critic_value = T.squeeze(self.critic(states))
             new_probs = dist.log_prob(actions)
 
@@ -100,13 +101,19 @@ class PPO(Learning):
                 T.clamp(prob_ratio, 1 - self.policy_clip, 1 + self.policy_clip)
                 * advantages
             )
-            actor_loss = -T.min(weighted_probs, weighted_clipped_probs).mean()
+            # actor_loss = -T.min(weighted_probs, weighted_clipped_probs).mean()
+            actor_loss = (
+                -T.min(weighted_probs, weighted_clipped_probs).mean() - 0.02 * entropy
+            )
             critic_loss = ((advantages + values - critic_value) ** 2).mean()
             total_loss = actor_loss + 0.5 * critic_loss
 
             self.actor_optimizer.zero_grad()
             self.critic_optimizer.zero_grad()
             total_loss.backward()
+
+            T.nn.utils.clip_grad_norm_(self.actor.parameters(), 0.5)
+            T.nn.utils.clip_grad_norm_(self.critic.parameters(), 0.5)
 
             actor_norm_sq = 0.0
             for p in self.actor.parameters():

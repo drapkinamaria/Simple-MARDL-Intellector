@@ -6,15 +6,16 @@ from learning import PPO
 import os
 
 
-hidden_layers = (2048, 2048)
-num_episodes = 500
+hidden_layers = (512, 512)
+num_episodes = 10
+learning_rate = 5e-4
+policy_clip = 0.3
 gamma = 0.99
 gae_lambda = 0.95
-policy_clip = 0.2
-learning_rate = 0.003
-buffer_size = 2048
+buffer_size = 512
 batch_size = 128
-epochs = 200
+epochs = 20
+
 
 envs = [
     ("env1", HexIntellectorEnv),

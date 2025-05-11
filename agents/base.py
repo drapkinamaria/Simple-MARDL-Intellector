@@ -35,7 +35,6 @@ class BaseAgent(ABC):
             "black_critic": [],
         }
 
-        # CSV-лог
         self.log_path = os.path.join(self.result_folder, "episode_logs.csv")
         if not os.path.exists(self.log_path):
             with open(self.log_path, "w", newline="") as f:
@@ -58,15 +57,15 @@ class BaseAgent(ABC):
         mask = self.env.get_all_actions(turn)[-1]
         state = self.env.get_state(turn)
         action, log_prob, value = self.learner.take_action(state, mask)
-        next_state, rewards, done, truncated, info = self.env.step(action)
+        next_state, total_rewards, done, truncated, info = self.env.step(action)
 
         self.learner.logger.log(
             f"Ep {self.current_ep + 1} | Turn {turn} | "
-            f"Action {action} | Reward {rewards[turn]:.4f} | Done {done}"
+            f"Action {action} | Reward {total_rewards[turn]:.4f} | Done {done}"
         )
 
-        episode.add(state, rewards[turn], action, done, log_prob, value, mask)
-        return done, next_state, rewards, action, log_prob, value, mask, info
+        episode.add(state, total_rewards[turn], action, done, log_prob, value, mask)
+        return done, next_state, total_rewards, action, log_prob, value, mask, info
 
     def train_episode(self, render: bool):
         renders = []
@@ -80,16 +79,23 @@ class BaseAgent(ABC):
 
         self.env.reset()
         turn = Pieces.WHITE
+        total_rewards_white = 0.0
+        total_rewards_black = 0.0
 
         _render()
 
         self.grad_norms = {k: [] for k in self.grad_norms}
 
         while True:
-            done, *data = self.take_action(turn, ep_w if turn == Pieces.WHITE else ep_b)
+            done, next_state, total_rewards, action, log_prob, value, mask, info = (
+                self.take_action(turn, ep_w if turn == Pieces.WHITE else ep_b)
+            )
             _render()
+
+            total_rewards_white += total_rewards[Pieces.WHITE]
+            total_rewards_black += total_rewards[Pieces.BLACK]
+
             if done:
-                info = data[-1]
                 break
             turn = 1 - turn
 
@@ -109,8 +115,8 @@ class BaseAgent(ABC):
         else:
             winner = "draw"
 
-        reward_white = sum(ep_w.rewards)
-        reward_black = sum(ep_b.rewards)
+        reward_white = total_rewards_white
+        reward_black = total_rewards_black
         steps_to_finish = self.env.steps
 
         agn_b = np.mean(self.grad_norms["black_actor"])
