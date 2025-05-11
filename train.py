@@ -7,7 +7,7 @@ import os
 
 
 hidden_layers = (512, 512)
-num_episodes = 100000
+num_episodes = 300000
 learning_rate = 5e-4
 policy_clip = 0.3
 gamma = 0.99
