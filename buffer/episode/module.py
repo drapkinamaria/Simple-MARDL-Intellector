@@ -1,5 +1,6 @@
 import numpy as np
 
+
 class Episode:
     def __init__(self) -> None:
         self.goals = []

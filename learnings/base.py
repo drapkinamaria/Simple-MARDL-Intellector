@@ -4,13 +4,14 @@ import torch.nn as nn
 import numpy as np
 from abc import ABC, abstractmethod
 
+
 class Learning(nn.Module, ABC):
     def __init__(
-            self,
-            environment: gymnasium.Env,
-            epochs: int,
-            gamma: float,
-            learning_rate: float
+        self,
+        environment: gymnasium.Env,
+        epochs: int,
+        gamma: float,
+        learning_rate: float,
     ) -> None:
         super().__init__()
         self.state_dim = np.prod(environment.observation_space.shape)

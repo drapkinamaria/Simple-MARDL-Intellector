@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 
+
 class Buffer(ABC):
     def __init__(self, max_size: int, batch_size: int, shuffle: bool = True) -> None:
         super().__init__()

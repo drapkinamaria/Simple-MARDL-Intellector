@@ -16,17 +16,17 @@ from learnings.ppo.critic import Critic
 
 class PPO(Learning):
     def __init__(
-            self,
-            environment: gymnasium.Env,
-            hidden_layers: tuple[int],
-            epochs: int,
-            buffer_size: int,
-            batch_size: int,
-            gamma: float = 0.99,
-            gae_lambda: float = 0.95,
-            policy_clip: float = 0.2,
-            learning_rate: float = 0.003,
-            log_path: str = None,
+        self,
+        environment: gymnasium.Env,
+        hidden_layers: tuple[int],
+        epochs: int,
+        buffer_size: int,
+        batch_size: int,
+        gamma: float = 0.99,
+        gae_lambda: float = 0.95,
+        policy_clip: float = 0.2,
+        learning_rate: float = 0.003,
+        log_path: str = None,
     ) -> None:
         super().__init__(environment, epochs, gamma, learning_rate)
 
@@ -101,8 +101,8 @@ class PPO(Learning):
 
             weighted_probs = advantages * prob_ratio
             weighted_clipped_probs = (
-                    T.clamp(prob_ratio, 1 - self.policy_clip, 1 + self.policy_clip)
-                    * advantages
+                T.clamp(prob_ratio, 1 - self.policy_clip, 1 + self.policy_clip)
+                * advantages
             )
 
             actor_loss = -T.min(weighted_probs, weighted_clipped_probs).mean()
@@ -129,8 +129,10 @@ class PPO(Learning):
             self.critic_optimizer.step()
 
     def learn(self):
-        for epoch in tqdm(range(self.epochs), desc="PPO Learning...", ncols=64, leave=False):
+        for epoch in tqdm(range(self.epochs), ncols=64, leave=False):
             self.epoch()
+        # for epoch in tqdm(range(self.epochs), desc="PPO Learning...", ncols=64, leave=False):
+        #     self.epoch()
         self.buffer.clear()
 
     def remember(self, episode: Episode):

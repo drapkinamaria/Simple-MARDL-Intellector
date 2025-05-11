@@ -2,6 +2,7 @@ import numpy as np
 import torch as T
 import torch.nn as nn
 
+
 def build_base_model(
     input_size: int,
     hidden_layers: tuple[int],
@@ -29,6 +30,7 @@ def make_batch_ids(n: int, batch_size: int, shuffle: bool = True) -> np.ndarray:
     if shuffle:
         np.random.shuffle(indices)
     return [indices[i : i + batch_size] for i in starts]
+
 
 def tensor_to_numpy(x: T.Tensor) -> np.ndarray:
     return x.detach().cpu().numpy()

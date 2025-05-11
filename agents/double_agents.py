@@ -2,7 +2,8 @@ from copy import deepcopy
 from agents.base import BaseAgent
 from buffer.episode import Episode
 from learnings.base import Learning
-from hex_intellector_env import HexIntellectorEnv
+from enviroments.hex_intellector_env import HexIntellectorEnv
+
 
 class DoubleAgentsIntellector(BaseAgent):
     def __init__(
@@ -23,7 +24,12 @@ class DoubleAgentsIntellector(BaseAgent):
 
     def learn(self):
         self.white_agent.learn()
+        self.grad_norms["white_actor"].append(self.white_agent.last_actor_grad_norm)
+        self.grad_norms["white_critic"].append(self.white_agent.last_critic_grad_norm)
+
         self.black_agent.learn()
+        self.grad_norms["black_actor"].append(self.black_agent.last_actor_grad_norm)
+        self.grad_norms["black_critic"].append(self.black_agent.last_critic_grad_norm)
 
     def save_learners(self):
         self.white_agent.save(self.result_folder, "white_ppo")
