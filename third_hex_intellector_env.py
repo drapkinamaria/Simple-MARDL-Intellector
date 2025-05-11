@@ -283,125 +283,149 @@ class ThirdHexIntellectorEnv(gymnasium.Env):
             return source_pos, possibles, actions_mask
 
         row, col = pos
-
         index = 0
 
         # Horizontal moves to the right
         for i in range(col + 2, self.grid_width, 2):
             next_pos = (row, i)
-            if not self.is_valid_move(next_pos) or not self.is_empty(next_pos, turn):
+            if not self.is_valid_move(next_pos):
                 break
-            possibles[index] = next_pos
-            source_pos[index] = pos
-            actions_mask[index] = 1
-            index += 1
+            if self.is_enemy(next_pos, turn):
+                possibles[index] = next_pos
+                source_pos[index] = pos
+                actions_mask[index] = 1
+                index += 1
+                break
+            elif self.is_empty(next_pos, turn):
+                possibles[index] = next_pos
+                source_pos[index] = pos
+                actions_mask[index] = 1
+                index += 1
+            else:
+                break
 
         # Horizontal moves to the left
         for i in range(col - 2, -1, -2):
             next_pos = (row, i)
-            if not self.is_valid_move(next_pos) or not self.is_empty(next_pos, turn):
+            if not self.is_valid_move(next_pos):
                 break
-            possibles[index] = next_pos
-            source_pos[index] = pos
-            actions_mask[index] = 1
-            index += 1
+            if self.is_enemy(next_pos, turn):
+                possibles[index] = next_pos
+                source_pos[index] = pos
+                actions_mask[index] = 1
+                index += 1
+                break
+            elif self.is_empty(next_pos, turn):
+                possibles[index] = next_pos
+                source_pos[index] = pos
+                actions_mask[index] = 1
+                index += 1
+            else:
+                break
 
-        # Diagonal moves to the left and down
-        new_col = col
-        new_row = row
+        # Diagonal moves down-left
+        new_row, new_col = row, col
         while new_row < self.grid_height:
             if new_col % 2 == 0:
                 new_col -= 1
                 new_row += 1
-                next_pos = (new_row, new_col)
-                if not self.is_valid_move(next_pos) or not self.is_empty(
-                    next_pos, turn
-                ):
-                    break
             else:
                 new_col -= 1
                 new_row += 2
-                next_pos = (new_row, new_col)
-                if not self.is_valid_move(next_pos) or not self.is_empty(
-                    next_pos, turn
-                ):
-                    break
-            possibles[index] = next_pos
-            source_pos[index] = pos
-            actions_mask[index] = 1
-            index += 1
+            next_pos = (new_row, new_col)
+            if not self.is_valid_move(next_pos):
+                break
+            if self.is_enemy(next_pos, turn):
+                possibles[index] = next_pos
+                source_pos[index] = pos
+                actions_mask[index] = 1
+                index += 1
+                break
+            elif self.is_empty(next_pos, turn):
+                possibles[index] = next_pos
+                source_pos[index] = pos
+                actions_mask[index] = 1
+                index += 1
+            else:
+                break
 
-        new_col = col
-        new_row = row
+        # Diagonal moves down-right
+        new_row, new_col = row, col
         while new_row < self.grid_height:
             if new_col % 2 == 0:
                 new_col += 1
                 new_row += 1
-                next_pos = (new_row, new_col)
-                if not self.is_valid_move(next_pos) or not self.is_empty(
-                    next_pos, turn
-                ):
-                    break
             else:
                 new_col += 1
                 new_row += 2
-                next_pos = (new_row, new_col)
-                if not self.is_valid_move(next_pos) or not self.is_empty(
-                    next_pos, turn
-                ):
-                    break
-            possibles[index] = next_pos
-            source_pos[index] = pos
-            actions_mask[index] = 1
-            index += 1
+            next_pos = (new_row, new_col)
+            if not self.is_valid_move(next_pos):
+                break
+            if self.is_enemy(next_pos, turn):
+                possibles[index] = next_pos
+                source_pos[index] = pos
+                actions_mask[index] = 1
+                index += 1
+                break
+            elif self.is_empty(next_pos, turn):
+                possibles[index] = next_pos
+                source_pos[index] = pos
+                actions_mask[index] = 1
+                index += 1
+            else:
+                break
 
-        new_col = col
-        new_row = row
+        # Diagonal moves up-left
+        new_row, new_col = row, col
         while new_row > 0:
             if new_col % 2 == 0:
                 new_col -= 1
                 new_row -= 2
-                next_pos = (new_row, new_col)
-                if not self.is_valid_move(next_pos) or not self.is_empty(
-                    next_pos, turn
-                ):
-                    break
             else:
                 new_col -= 1
                 new_row -= 1
-                next_pos = (new_row, new_col)
-                if not self.is_valid_move(next_pos) or not self.is_empty(
-                    next_pos, turn
-                ):
-                    break
-            possibles[index] = next_pos
-            source_pos[index] = pos
-            actions_mask[index] = 1
-            index += 1
+            next_pos = (new_row, new_col)
+            if not self.is_valid_move(next_pos):
+                break
+            if self.is_enemy(next_pos, turn):
+                possibles[index] = next_pos
+                source_pos[index] = pos
+                actions_mask[index] = 1
+                index += 1
+                break
+            elif self.is_empty(next_pos, turn):
+                possibles[index] = next_pos
+                source_pos[index] = pos
+                actions_mask[index] = 1
+                index += 1
+            else:
+                break
 
-        new_col = col
-        new_row = row
+        # Diagonal moves up-right
+        new_row, new_col = row, col
         while new_row > 0:
             if new_col % 2 == 0:
                 new_col += 1
                 new_row -= 2
-                next_pos = (new_row, new_col)
-                if not self.is_valid_move(next_pos) or not self.is_empty(
-                    next_pos, turn
-                ):
-                    break
             else:
                 new_col += 1
                 new_row -= 1
-                next_pos = (new_row, new_col)
-                if not self.is_valid_move(next_pos) or not self.is_empty(
-                    next_pos, turn
-                ):
-                    break
-            possibles[index] = next_pos
-            source_pos[index] = pos
-            actions_mask[index] = 1
-            index += 1
+            next_pos = (new_row, new_col)
+            if not self.is_valid_move(next_pos):
+                break
+            if self.is_enemy(next_pos, turn):
+                possibles[index] = next_pos
+                source_pos[index] = pos
+                actions_mask[index] = 1
+                index += 1
+                break
+            elif self.is_empty(next_pos, turn):
+                possibles[index] = next_pos
+                source_pos[index] = pos
+                actions_mask[index] = 1
+                index += 1
+            else:
+                break
 
         return source_pos, possibles, actions_mask
 
@@ -499,17 +523,7 @@ class ThirdHexIntellectorEnv(gymnasium.Env):
         # Vertical moves downward
         for i in range(row + 1, self.grid_height):
             next_pos = (i, col)
-            if not self.is_valid_move(next_pos) or not self.is_empty(next_pos, turn):
-                break
-            possibles[index] = next_pos
-            actions_mask[index] = 1
-            source_pos[index] = pos
-            index += 1
-
-        # Vertical moves upward
-        for i in range(row - 1, -1, -1):
-            next_pos = (i, col)
-            if not self.is_valid_move(next_pos) or not self.is_empty(next_pos, turn):
+            if not self.is_valid_move(next_pos):
                 break
             if self.is_enemy(next_pos, turn):
                 possibles[index] = next_pos
@@ -517,10 +531,32 @@ class ThirdHexIntellectorEnv(gymnasium.Env):
                 actions_mask[index] = 1
                 index += 1
                 break
-            possibles[index] = next_pos
-            source_pos[index] = pos
-            actions_mask[index] = 1
-            index += 1
+            elif self.is_empty(next_pos, turn):
+                possibles[index] = next_pos
+                source_pos[index] = pos
+                actions_mask[index] = 1
+                index += 1
+            else:
+                break
+
+        # Vertical moves upward
+        for i in range(row - 1, -1, -1):
+            next_pos = (i, col)
+            if not self.is_valid_move(next_pos):
+                break
+            if self.is_enemy(next_pos, turn):
+                possibles[index] = next_pos
+                source_pos[index] = pos
+                actions_mask[index] = 1
+                index += 1
+                break
+            elif self.is_empty(next_pos, turn):
+                possibles[index] = next_pos
+                source_pos[index] = pos
+                actions_mask[index] = 1
+                index += 1
+            else:
+                break
 
         # Diagonal moves to the left and down
         new_col = col
@@ -531,12 +567,21 @@ class ThirdHexIntellectorEnv(gymnasium.Env):
             else:
                 next_pos = (new_row + 1, new_col - 1)
 
-            if not self.is_valid_move(next_pos) or not self.is_empty(next_pos, turn):
+            if not self.is_valid_move(next_pos):
                 break
-            possibles[index] = next_pos
-            source_pos[index] = pos
-            actions_mask[index] = 1
-            index += 1
+            if self.is_enemy(next_pos, turn):
+                possibles[index] = next_pos
+                source_pos[index] = pos
+                actions_mask[index] = 1
+                index += 1
+                break
+            elif self.is_empty(next_pos, turn):
+                possibles[index] = next_pos
+                source_pos[index] = pos
+                actions_mask[index] = 1
+                index += 1
+            else:
+                break
 
             if new_col % 2 != 0:
                 new_row += 1
@@ -551,12 +596,21 @@ class ThirdHexIntellectorEnv(gymnasium.Env):
             else:
                 next_pos = (new_row, new_col - 1)
 
-            if not self.is_valid_move(next_pos) or not self.is_empty(next_pos, turn):
+            if not self.is_valid_move(next_pos):
                 break
-            possibles[index] = next_pos
-            source_pos[index] = pos
-            actions_mask[index] = 1
-            index += 1
+            if self.is_enemy(next_pos, turn):
+                possibles[index] = next_pos
+                source_pos[index] = pos
+                actions_mask[index] = 1
+                index += 1
+                break
+            elif self.is_empty(next_pos, turn):
+                possibles[index] = next_pos
+                source_pos[index] = pos
+                actions_mask[index] = 1
+                index += 1
+            else:
+                break
 
             if new_col % 2 == 0:
                 new_row -= 1
@@ -571,12 +625,21 @@ class ThirdHexIntellectorEnv(gymnasium.Env):
             else:
                 next_pos = (new_row + 1, new_col + 1)
 
-            if not self.is_valid_move(next_pos) or not self.is_empty(next_pos, turn):
+            if not self.is_valid_move(next_pos):
                 break
-            possibles[index] = next_pos
-            source_pos[index] = pos
-            actions_mask[index] = 1
-            index += 1
+            if self.is_enemy(next_pos, turn):
+                possibles[index] = next_pos
+                source_pos[index] = pos
+                actions_mask[index] = 1
+                index += 1
+                break
+            elif self.is_empty(next_pos, turn):
+                possibles[index] = next_pos
+                source_pos[index] = pos
+                actions_mask[index] = 1
+                index += 1
+            else:
+                break
 
             if new_col % 2 != 0:
                 new_row += 1
@@ -591,12 +654,21 @@ class ThirdHexIntellectorEnv(gymnasium.Env):
             else:
                 next_pos = (new_row, new_col + 1)
 
-            if not self.is_valid_move(next_pos) or not self.is_empty(next_pos, turn):
+            if not self.is_valid_move(next_pos):
                 break
-            possibles[index] = next_pos
-            source_pos[index] = pos
-            actions_mask[index] = 1
-            index += 1
+            if self.is_enemy(next_pos, turn):
+                possibles[index] = next_pos
+                source_pos[index] = pos
+                actions_mask[index] = 1
+                index += 1
+                break
+            elif self.is_empty(next_pos, turn):
+                possibles[index] = next_pos
+                source_pos[index] = pos
+                actions_mask[index] = 1
+                index += 1
+            else:
+                break
 
             if new_col % 2 == 0:
                 new_row -= 1
