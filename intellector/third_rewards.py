@@ -7,3 +7,4 @@ DRAW = 0
 CAPTURE_REWARDS = {
     pieces.INTELLECTOR: 3.5,
 }
+STEP_PENALTY = -0.1

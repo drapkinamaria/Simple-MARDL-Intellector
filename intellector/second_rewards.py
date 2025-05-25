@@ -13,3 +13,4 @@ CAPTURE_REWARDS = {
     pieces.PROGRESSOR: 0.5,
     pieces.INTELLECTOR: 3.5,
 }
+STEP_PENALTY = -0.1

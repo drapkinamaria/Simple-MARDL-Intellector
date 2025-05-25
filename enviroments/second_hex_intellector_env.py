@@ -977,6 +977,8 @@ class SecondHexIntellectorEnv(gymnasium.Env):
                     src[action], poss[action], self.turn
                 )
 
+        step_rewards[self.turn] += rewards_mod.STEP_PENALTY
+
         self.steps += 1
         self.turn = 1 - self.turn
 
