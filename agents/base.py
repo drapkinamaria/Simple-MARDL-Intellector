@@ -6,14 +6,12 @@ import tqdm
 
 from learnings.base import Learning
 from buffer.episode import Episode
-from enviroments.hex_intellector_env import HexIntellectorEnv
-import intellector.pieces as Pieces
 
 
 class BaseAgent(ABC):
     def __init__(
         self,
-        env: HexIntellectorEnv,
+        env,
         learner: Learning,
         episodes: int,
         train_on: int,
@@ -24,6 +22,7 @@ class BaseAgent(ABC):
         self.episodes = episodes
         self.train_on = train_on
         self.result_folder = result_folder
+        self.episodes_since_train = 0
         os.makedirs(self.result_folder, exist_ok=True)
         os.makedirs(os.path.join(self.result_folder, "renders"), exist_ok=True)
 
@@ -68,95 +67,84 @@ class BaseAgent(ABC):
         return done, next_state, total_rewards, action, log_prob, value, mask, info
 
     def train_episode(self, render: bool):
-        renders = []
-
-        def _render():
-            if render and self.env.render_mode != "human":
-                renders.append(self.env.render())
-
         ep_w = Episode()
         ep_b = Episode()
-
         self.env.reset()
-        turn = Pieces.WHITE
+        turn = 0
         total_rewards_white = 0.0
         total_rewards_black = 0.0
 
-        _render()
-
-        self.grad_norms = {k: [] for k in self.grad_norms}
-
         while True:
             done, next_state, total_rewards, action, log_prob, value, mask, info = (
-                self.take_action(turn, ep_w if turn == Pieces.WHITE else ep_b)
+                self.take_action(turn, ep_w if turn == 0 else ep_b)
             )
-            _render()
 
-            total_rewards_white += total_rewards[Pieces.WHITE]
-            total_rewards_black += total_rewards[Pieces.BLACK]
+            total_rewards_white += total_rewards[0]
+            total_rewards_black += total_rewards[1]
 
             if done:
                 break
             turn = 1 - turn
 
         self.add_episodes(ep_w, ep_b)
-        self.learn()
+        self.episodes_since_train += 1
 
-        if (self.current_ep + 1) % self.train_on == 0:
-            self.save()
+        if self.episodes_since_train >= self.train_on:
+            self.learn()
+            self.white_agent.buffer.clear()
+            self.black_agent.buffer.clear()
+            self.episodes_since_train = 0
+            self.save_learners()
 
-        episode_num = self.current_ep + 1
-
-        winner_idx = info.get("winner", None)
-        if winner_idx == "white":
-            winner = "white"
-        elif winner_idx == "black":
-            winner = "black"
-        else:
-            winner = "draw"
-
-        reward_white = total_rewards_white
-        reward_black = total_rewards_black
-        steps_to_finish = self.env.steps
-
-        agn_b = np.mean(self.grad_norms["black_actor"])
-        cgn_b = np.mean(self.grad_norms["black_critic"])
-        agn_w = np.mean(self.grad_norms["white_actor"])
-        cgn_w = np.mean(self.grad_norms["white_critic"])
+        agn_b = (
+            np.mean(self.grad_norms["black_actor"])
+            if self.grad_norms["black_actor"]
+            else 0.0
+        )
+        cgn_b = (
+            np.mean(self.grad_norms["black_critic"])
+            if self.grad_norms["black_critic"]
+            else 0.0
+        )
+        agn_w = (
+            np.mean(self.grad_norms["white_actor"])
+            if self.grad_norms["white_actor"]
+            else 0.0
+        )
+        cgn_w = (
+            np.mean(self.grad_norms["white_critic"])
+            if self.grad_norms["white_critic"]
+            else 0.0
+        )
 
         with open(self.log_path, "a", newline="") as f:
             writer = csv.writer(f)
             writer.writerow(
                 [
-                    episode_num,
-                    winner,
-                    reward_black,
-                    reward_white,
-                    steps_to_finish,
+                    self.current_ep + 1,
+                    info.get("winner", "draw"),
+                    total_rewards_black,
+                    total_rewards_white,
+                    self.env.steps,
                     agn_b,
                     cgn_b,
                     agn_w,
                     cgn_w,
                 ]
             )
-
         self.current_ep += 1
 
     def train(self, render_each: int = 1, save_on_learn: bool = True):
         for ep in tqdm.tqdm(range(self.episodes)):
             do_render = ep % render_each == 0
             self.train_episode(do_render)
-            self.save()
+        self.save()
 
-    def save(self):
+    def save(self) -> None:
         self.save_learners()
 
     @abstractmethod
     def save_learners(self):
-        pass
-
-    @abstractmethod
-    def learn(self):
         pass
 
     @abstractmethod

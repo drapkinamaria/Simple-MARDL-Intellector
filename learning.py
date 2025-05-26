@@ -1,5 +1,6 @@
 import numpy as np
 import torch as T
+import torch.nn.functional as F
 import torch.optim as optim
 from logger import Logger
 from learnings.base import Learning
@@ -20,130 +21,162 @@ class PPO(Learning):
         epochs: int,
         buffer_size: int,
         batch_size: int,
-        gamma: float = 0.99,
-        gae_lambda: float = 0.95,
-        policy_clip: float = 0.2,
-        learning_rate: float = 0.003,
+        gamma: float,
+        gae_lambda,
+        policy_clip,
+        learning_rate,
         log_path: str = None,
     ) -> None:
         super().__init__(environment, epochs, gamma, learning_rate)
-        self.last_actor_grad_norm = 0.0
-        self.last_critic_grad_norm = 0.0
         self.env = environment
         self.gae_lambda = gae_lambda
         self.policy_clip = policy_clip
+
         self.buffer = BufferPPO(
             gamma=gamma,
             max_size=buffer_size,
             batch_size=batch_size,
             gae_lambda=gae_lambda,
         )
+
         self.logger = Logger(log_path)
         self.actor = Actor(self.state_dim, self.action_dim, hidden_layers)
         self.critic = Critic(self.state_dim, hidden_layers)
+
         self.actor_optimizer = optim.Adam(self.actor.parameters(), lr=learning_rate)
         self.critic_optimizer = optim.Adam(self.critic.parameters(), lr=learning_rate)
+
         self.to(self.device)
 
-    def take_action(self, state: np.ndarray, action_mask: np.ndarray):
-        state = T.FloatTensor(state).unsqueeze(0).to(self.device)
-        action_mask = T.FloatTensor(action_mask).unsqueeze(0).to(self.device)
-        dist = self.actor(state, action_mask)
+        self.entropy_coef = 0.01
+        self.value_coef = 0.5
+        self.max_grad_norm = 0.5
+
+        self.last_actor_grad_norm = 0.0
+        self.last_critic_grad_norm = 0.0
+
+    def take_action(
+        self, state: np.ndarray, action_mask: np.ndarray
+    ) -> tuple[int, float, float]:
+        state = T.tensor(state, dtype=T.float32).unsqueeze(0).to(self.device)
+        mask = T.tensor(action_mask, dtype=T.bool).unsqueeze(0).to(self.device)
+
+        dist = self.actor(state, mask)
         action = dist.sample()
 
-        while not action_mask[0, action].item():
+        while not mask[0, action].item():
             action = dist.sample()
 
-        probs = T.squeeze(dist.log_prob(action)).item()
-        value = T.squeeze(self.critic(state)).item()
-        action = T.squeeze(action).item()
+        logp = dist.log_prob(action).item()
+        value = self.critic(state).item()
+        idx = action.item()
 
-        source_pos, target_pos, action_mask_np = self.env.get_all_actions(self.env.turn)
-        from_pos = tuple(source_pos[action])
-        to_pos = tuple(target_pos[action])
-
+        source_pos, target_pos, _ = self.env.get_all_actions(self.env.turn)
+        from_pos = tuple(source_pos[idx])
+        to_pos = tuple(target_pos[idx])
         for name, pos in self.env.pieces[self.env.turn].items():
             if isinstance(pos, tuple) and pos == from_pos:
                 self.logger.log(f"{name} {self.env.turn}: {from_pos} -> {to_pos}")
                 break
 
-        return action, probs, value
+        return idx, logp, value
 
     def epoch(self):
         actor_grad_norms = []
         critic_grad_norms = []
+
+        data = self.buffer.sample()
+        if not data or len(data[0]) == 0:
+            self.last_actor_grad_norm = 0.0
+            self.last_critic_grad_norm = 0.0
+            return
+
         (
             states_arr,
             actions_arr,
             rewards_arr,
-            goals_arr,
+            dones_arr,
             old_probs_arr,
             values_arr,
             masks_arr,
             advantages_arr,
             batches,
-        ) = self.buffer.sample()
+        ) = data
+
         for batch in batches:
-            masks = T.Tensor(masks_arr[batch]).to(self.device)
-            values = T.Tensor(values_arr[batch]).to(self.device)
-            states = T.Tensor(states_arr[batch]).to(self.device)
-            actions = T.Tensor(actions_arr[batch]).to(self.device)
-            old_probs = T.Tensor(old_probs_arr[batch]).to(self.device)
-            advantages = T.Tensor(advantages_arr[batch]).to(self.device)
+            masks = T.tensor(masks_arr[batch], dtype=T.bool).to(self.device)
+            states = T.tensor(states_arr[batch], dtype=T.float32).to(self.device)
+            values = T.tensor(values_arr[batch], dtype=T.float32).to(self.device)
+            actions = T.tensor(actions_arr[batch], dtype=T.long).to(self.device)
+            old_probs = T.tensor(old_probs_arr[batch], dtype=T.float32).to(self.device)
+            advantages = T.tensor(advantages_arr[batch], dtype=T.float32).to(
+                self.device
+            )
+
+            advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
+
             dist = self.actor(states, masks)
             entropy = dist.entropy().mean()
-            critic_value = T.squeeze(self.critic(states))
+            critic_value = self.critic(states).squeeze()
             new_probs = dist.log_prob(actions)
 
             prob_ratio = (new_probs - old_probs).exp()
             weighted_probs = advantages * prob_ratio
-            weighted_clipped_probs = (
+            clipped_probs = (
                 T.clamp(prob_ratio, 1 - self.policy_clip, 1 + self.policy_clip)
                 * advantages
             )
-            # actor_loss = -T.min(weighted_probs, weighted_clipped_probs).mean()
-            actor_loss = (
-                -T.min(weighted_probs, weighted_clipped_probs).mean() - 0.02 * entropy
-            )
-            critic_loss = ((advantages + values - critic_value) ** 2).mean()
-            total_loss = actor_loss + 0.5 * critic_loss
+
+            actor_loss = -T.min(weighted_probs, clipped_probs).mean()
+            actor_loss -= self.entropy_coef * entropy
+
+            returns = advantages + values
+            critic_loss = F.mse_loss(critic_value, returns)
+
+            total_loss = actor_loss + self.value_coef * critic_loss
 
             self.actor_optimizer.zero_grad()
             self.critic_optimizer.zero_grad()
             total_loss.backward()
 
-            T.nn.utils.clip_grad_norm_(self.actor.parameters(), 0.5)
-            T.nn.utils.clip_grad_norm_(self.critic.parameters(), 0.5)
+            T.nn.utils.clip_grad_norm_(self.actor.parameters(), self.max_grad_norm)
+            T.nn.utils.clip_grad_norm_(self.critic.parameters(), self.max_grad_norm)
 
-            actor_norm_sq = 0.0
-            for p in self.actor.parameters():
-                if p.grad is not None:
-                    actor_norm_sq += p.grad.data.norm() ** 2
-            critic_norm_sq = 0.0
-            for p in self.critic.parameters():
-                if p.grad is not None:
-                    critic_norm_sq += p.grad.data.norm() ** 2
-
-            actor_grad_norms.append(T.sqrt(actor_norm_sq).item())
-            critic_grad_norms.append(T.sqrt(critic_norm_sq).item())
+            actor_sq = sum(
+                p.grad.data.norm(2).item() ** 2
+                for p in self.actor.parameters()
+                if p.grad is not None
+            )
+            critic_sq = sum(
+                p.grad.data.norm(2).item() ** 2
+                for p in self.critic.parameters()
+                if p.grad is not None
+            )
+            actor_grad_norms.append(T.sqrt(T.tensor(actor_sq)).item())
+            critic_grad_norms.append(T.sqrt(T.tensor(critic_sq)).item())
 
             self.actor_optimizer.step()
             self.critic_optimizer.step()
 
-        self.last_actor_grad_norm = sum(actor_grad_norms) / len(actor_grad_norms)
-        self.last_critic_grad_norm = sum(critic_grad_norms) / len(critic_grad_norms)
+        self.last_actor_grad_norm = (
+            float(np.mean(actor_grad_norms)) if actor_grad_norms else 0.0
+        )
+        self.last_critic_grad_norm = (
+            float(np.mean(critic_grad_norms)) if critic_grad_norms else 0.0
+        )
 
     def learn(self):
-        for epoch in tqdm(
+        for _ in tqdm(
             range(self.epochs), desc="PPO Learning...", ncols=64, leave=False
         ):
             self.epoch()
-        self.buffer.clear()
 
     def remember(self, episode: Episode):
-        self.buffer.add(episode)
+        if len(episode.states) > 0:
+            self.buffer.add(episode)
 
-    def save(self, folder: str, name: str):
+    def save(self, folder: str, name: str) -> None:
+        path = os.path.join(folder, f"{name}.pt")
         T.save(
             {
                 "actor_state_dict": self.actor.state_dict(),
@@ -151,16 +184,20 @@ class PPO(Learning):
                 "actor_optimizer_state_dict": self.actor_optimizer.state_dict(),
                 "critic_optimizer_state_dict": self.critic_optimizer.state_dict(),
             },
-            os.path.join(folder, f"{name}.pt"),
+            path,
         )
 
     def load(self, folder: str, name: str):
-        checkpoint = T.load(
-            os.path.join(folder, f"{name}.pt"), map_location=self.device
-        )
-        self.actor.load_state_dict(checkpoint["actor_state_dict"])
-        self.critic.load_state_dict(checkpoint["critic_state_dict"])
-        self.actor_optimizer.load_state_dict(checkpoint["actor_optimizer_state_dict"])
-        self.critic_optimizer.load_state_dict(checkpoint["critic_optimizer_state_dict"])
+        path = os.path.join(folder, f"{name}.pt")
+        if not os.path.exists(path):
+            self.logger.log(
+                f"Warning: Model file {path} does not exist. Using random init."
+            )
+            return
+        ckpt = T.load(path, map_location=self.device)
+        self.actor.load_state_dict(ckpt["actor_state_dict"])
+        self.critic.load_state_dict(ckpt["critic_state_dict"])
+        self.actor_optimizer.load_state_dict(ckpt["actor_optimizer_state_dict"])
+        self.critic_optimizer.load_state_dict(ckpt["critic_optimizer_state_dict"])
         self.actor.to(self.device)
         self.critic.to(self.device)

@@ -7,19 +7,20 @@ import os
 
 
 hidden_layers = (512, 512)
-num_episodes = 300000
-learning_rate = 5e-4
-policy_clip = 0.3
+num_episodes = 100000
+learning_rate = 3e-4
+policy_clip = 0.1
 gamma = 0.99
 gae_lambda = 0.95
-buffer_size = 512
-batch_size = 128
-epochs = 20
+buffer_size = 8192
+batch_size = 512
+epochs = 4
+train_on = 5
 
 
 envs = [
-    ("env1", HexIntellectorEnv),
-    ("env2", SecondHexIntellectorEnv),
+    # ("env1", HexIntellectorEnv),
+    # ("env2", SecondHexIntellectorEnv),
     ("env3", ThirdHexIntellectorEnv),
 ]
 
@@ -50,7 +51,7 @@ for env_name, EnvClass in envs:
         env=env,
         learner=ppo,
         episodes=num_episodes,
-        train_on=buffer_size,
+        train_on=train_on,
         result_folder=result_folder,
     )
     agent.train(render_each=1, save_on_learn=True)

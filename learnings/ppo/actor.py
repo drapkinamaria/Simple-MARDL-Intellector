@@ -1,27 +1,26 @@
-import numpy as np
-import torch as T
 import torch.nn as nn
-import torch.nn.functional as F
-
-from utils import build_base_model
-from torch.distributions.categorical import Categorical
+from torch.distributions import Categorical
 
 
 class Actor(nn.Module):
-    def __init__(
-        self, state_dim: int, action_dim: int, hidden_layers: tuple[int]
-    ) -> None:
+    def __init__(self, input_dim, output_dim, hidden_layers):
         super().__init__()
-        self.state_dim = state_dim
-        self.action_dim = action_dim
-        self.hidden_layers = hidden_layers
-        self.base_model = build_base_model(
-            state_dim, hidden_layers, action_dim, nn.Softmax(dim=1)
-        )
+        layers = []
+        prev_dim = input_dim
+        for h in hidden_layers:
+            layers.append(nn.Linear(prev_dim, h))
+            layers.append(nn.ReLU())
+            prev_dim = h
+        layers.append(nn.Linear(prev_dim, output_dim))
+        self.model = nn.Sequential(*layers)
 
-    def forward(self, states: T.Tensor, action_mask: T.Tensor):
-        x = self.base_model(states)
-        s = action_mask.sum(dim=1)
-        l = ((x * (1 - action_mask)).sum(dim=1) / s).unsqueeze(1)
-        x = (x + l) * action_mask
-        return Categorical(x)
+    def forward(self, x, action_mask):
+        logits = self.model(x)
+
+        if logits.dtype != action_mask.dtype:
+            action_mask = action_mask.bool()
+
+        invalid_mask = (~action_mask).float()
+        masked_logits = logits - invalid_mask * 1e9
+
+        return Categorical(logits=masked_logits)

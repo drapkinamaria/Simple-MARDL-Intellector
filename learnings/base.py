@@ -24,11 +24,13 @@ class Learning(nn.Module, ABC):
         self.device = T.device("cuda:0" if T.cuda.is_available() else "cpu")
 
     @abstractmethod
-    def take_action(self, state: np.ndarray, *args):
+    def take_action(
+        self, state: np.ndarray, action_mask: np.ndarray
+    ) -> tuple[int, float, float]:
         pass
 
     @abstractmethod
-    def learn(self):
+    def learn(self) -> None:
         pass
 
     @abstractmethod
@@ -36,5 +38,5 @@ class Learning(nn.Module, ABC):
         pass
 
     @abstractmethod
-    def save(self, folder: str):
+    def save(self, folder: str, name: str) -> None:
         pass

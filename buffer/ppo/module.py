@@ -38,7 +38,7 @@ class BufferPPO(Buffer):
         values = sum(map(lambda x: x.values, self.episodes), [])
         states = sum(map(lambda x: x.states, self.episodes), [])
         actions = sum(map(lambda x: x.actions, self.episodes), [])
-        rewards = sum(map(lambda x: x.rewards, self.episodes), [])
+        rewards = [r for ep in self.episodes for r in ep.rewards]
         advantages = sum(self.advantages, [])
 
         batches = utils.make_batch_ids(
